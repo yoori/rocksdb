@@ -714,6 +714,7 @@ set(SOURCES
         env/file_system_tracer.cc
         env/fs_remap.cc
         env/mock_env.cc
+        env/unique_id.cc
         file/delete_scheduler.cc
         file/file_prefetch_buffer.cc
         file/file_util.cc
