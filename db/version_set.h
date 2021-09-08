@@ -1263,6 +1263,8 @@ class VersionSet {
 
   static uint64_t GetTotalSstFilesSize(Version* dummy_versions);
 
+  static uint64_t GetTotalBlobFileSize(Version* dummy_versions);
+
   // Get the IO Status returned by written Manifest.
   const IOStatus& io_status() const { return io_status_; }
 
