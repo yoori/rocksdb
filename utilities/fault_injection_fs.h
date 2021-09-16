@@ -162,6 +162,8 @@ class TestFSRandomAccessFile : public FSRandomAccessFile {
     throw "Not implemented";
   }
 
+  IOStatus MultiRead(FSReadRequest* reqs, size_t num_reqs,
+                     const IOOptions& options, IODebugContext* dbg) override;
   size_t GetRequiredBufferAlignment() const override {
     return target_->GetRequiredBufferAlignment();
   }
