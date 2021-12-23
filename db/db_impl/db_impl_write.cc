@@ -474,11 +474,11 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
 }
 
 async_result DBImpl::AsyncWriteImpl(const WriteOptions& write_options,
-                         WriteBatch* my_batch, WriteCallback* callback,
-                         uint64_t* log_used, uint64_t log_ref,
-                         bool disable_memtable, uint64_t* seq_used,
-                         size_t batch_cnt,
-                         PreReleaseCallback* pre_release_callback) {
+                                    WriteBatch* my_batch,
+                                    WriteCallback* callback, uint64_t* log_used,
+                                    uint64_t log_ref, bool disable_memtable,
+                                    uint64_t* seq_used, size_t batch_cnt,
+                                    PreReleaseCallback* pre_release_callback) {
   assert(!seq_per_batch_ || batch_cnt != 0);
   if (my_batch == nullptr) {
     co_return Status::Corruption("Batch is nullptr!");
@@ -533,9 +533,9 @@ async_result DBImpl::AsyncWriteImpl(const WriteOptions& write_options,
 
   if (immutable_db_options_.unordered_write) {
     const size_t sub_batch_cnt = batch_cnt != 0
-                                 ? batch_cnt
-                                 // every key is a sub-batch consuming a seq
-                                 : WriteBatchInternal::Count(my_batch);
+                                     ? batch_cnt
+                                     // every key is a sub-batch consuming a seq
+                                     : WriteBatchInternal::Count(my_batch);
     uint64_t seq = 0;
     // Use a write thread to i) optimize for WAL write, ii) publish last
     // sequence in in increasing order, iii) call pre_release_callback serially
@@ -610,6 +610,7 @@ async_result DBImpl::AsyncWriteImpl(const WriteOptions& write_options,
     assert(w.state == WriteThread::STATE_COMPLETED);
     // STATE_COMPLETED conditional below handles exit
   }
+
   if (w.state == WriteThread::STATE_COMPLETED) {
     if (log_used != nullptr) {
       *log_used = w.log_used;
@@ -741,9 +742,9 @@ async_result DBImpl::AsyncWriteImpl(const WriteOptions& write_options,
     if (!two_write_queues_) {
       if (status.ok() && !write_options.disableWAL) {
         PERF_TIMER_GUARD(write_wal_time);
-        auto result = AsyncWriteToWAL(write_group, log_writer, log_used,
-                                      need_log_sync, need_log_dir_sync,
-                                      last_sequence + 1);
+        auto result =
+            AsyncWriteToWAL(write_group, log_writer, log_used, need_log_sync,
+                            need_log_dir_sync, last_sequence + 1);
         co_await result;
         io_s = result.io_result();
       }
@@ -1266,7 +1267,8 @@ Status DBImpl::WriteImplWALOnly(
   WriteThread::Writer w(write_options, my_batch, callback, log_ref,
                         disable_memtable, sub_batch_cnt, pre_release_callback);
   RecordTick(stats_, WRITE_WITH_WAL);
-  StopWatch write_sw(immutable_db_options_.clock, stats_, DB_WRITE);
+  StopWatch write_sw(immutable_db_options_.clock, immutable_db_options_.stats,
+                     DB_WRITE);
 
   write_thread->JoinBatchGroup(&w);
   assert(w.state != WriteThread::STATE_PARALLEL_MEMTABLE_WRITER);
@@ -1450,8 +1452,7 @@ async_result DBImpl::AsyncWriteImplWALOnly(
   WriteThread::Writer w(write_options, my_batch, callback, log_ref,
                         disable_memtable, sub_batch_cnt, pre_release_callback);
   RecordTick(stats_, WRITE_WITH_WAL);
-  StopWatch write_sw(immutable_db_options_.clock, immutable_db_options_.stats,
-                     DB_WRITE);
+  StopWatch write_sw(immutable_db_options_.clock, stats_, DB_WRITE);
 
   write_thread->JoinBatchGroup(&w);
   assert(w.state != WriteThread::STATE_PARALLEL_MEMTABLE_WRITER);
@@ -1550,7 +1551,8 @@ async_result DBImpl::AsyncWriteImplWALOnly(
   IOStatus io_s;
   io_s.PermitUncheckedError();  // Allow io_s to be uninitialized
   if (!write_options.disableWAL) {
-    auto result = AsyncConcurrentWriteToWAL(write_group, log_used, &last_sequence, seq_inc);
+    auto result = AsyncConcurrentWriteToWAL(write_group, log_used,
+                                            &last_sequence, seq_inc);
     co_await result;
     io_s = result.io_result();
     status = io_s;
@@ -1860,8 +1862,8 @@ IOStatus DBImpl::WriteToWAL(const WriteBatch& merged_batch,
 }
 
 async_result DBImpl::AsyncWriteToWAL(const WriteBatch& merged_batch,
-                                         log::Writer* log_writer, uint64_t* log_used,
-                                         uint64_t* log_size) {
+                                     log::Writer* log_writer,
+                                     uint64_t* log_used, uint64_t* log_size) {
   assert(log_size != nullptr);
   Slice log_entry = WriteBatchInternal::Contents(&merged_batch);
   *log_size = log_entry.size();
@@ -1981,9 +1983,10 @@ IOStatus DBImpl::WriteToWAL(const WriteThread::WriteGroup& write_group,
 }
 
 async_result DBImpl::AsyncWriteToWAL(const WriteThread::WriteGroup& write_group,
-                                        log::Writer* log_writer, uint64_t* log_used,
-                                        bool need_log_sync, bool need_log_dir_sync,
-                                        SequenceNumber sequence) {
+                                     log::Writer* log_writer,
+                                     uint64_t* log_used, bool need_log_sync,
+                                     bool need_log_dir_sync,
+                                     SequenceNumber sequence) {
   IOStatus io_s;
   assert(!write_group.leader->disable_wal);
   // Same holds for all in the batch group
@@ -2020,7 +2023,7 @@ async_result DBImpl::AsyncWriteToWAL(const WriteThread::WriteGroup& write_group,
     //  - as long as other threads don't modify it, it's safe to read
     //    from std::deque from multiple threads concurrently.
     for (auto& log : logs_) {
-      auto res =  log.writer->file()->AsSync(immutable_db_options_.use_fsync);
+      auto res = log.writer->file()->AsSync(immutable_db_options_.use_fsync);
       co_await res;
       io_s = res.io_result();
       if (!io_s.ok()) {
@@ -2954,8 +2957,9 @@ Status DB::Put(const WriteOptions& opt, ColumnFamilyHandle* column_family,
   return Write(opt, &batch);
 }
 
-async_result DBImpl::AsyncPut(const WriteOptions& opt, ColumnFamilyHandle* column_family,
-               const Slice& key, const Slice& value) {
+async_result DBImpl::AsyncPut(const WriteOptions& opt,
+                              ColumnFamilyHandle* column_family,
+                              const Slice& key, const Slice& value) {
   if (nullptr == opt.timestamp) {
     // Pre-allocate size of write batch conservatively.
     // 8 bytes are taken by header, 4 bytes for count, 1 byte for type,
