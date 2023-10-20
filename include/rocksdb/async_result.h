@@ -118,15 +118,20 @@ struct async_result {
 
 // used for liburing read or write
 struct file_page {
+  file_page() = default;
+
   file_page(int pages) : pages_{pages} {
     iov = (iovec*)calloc(pages, sizeof(struct iovec));
   }
 
-  ~file_page() { free(iov); }
+  virtual ~file_page() {
+    if (iov)	  
+      free(iov);
+  }
 
-  async_result::promise_type* promise;
-  struct iovec* iov;
-  int pages_;
+  async_result::promise_type* promise = nullptr;
+  struct iovec* iov = nullptr;
+  int pages_ = 0;
 };
 
 }  // namespace ROCKSDB_NAMESPACE
