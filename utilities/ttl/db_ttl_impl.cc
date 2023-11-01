@@ -19,6 +19,45 @@
 #include "util/coding.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+class DBWithTTLImpl::Handler : public WriteBatch::Handler {
+public:
+  explicit Handler(SystemClock* clock) : clock_(clock) {}
+  WriteBatch updates_ttl;
+  Status PutCF(uint32_t column_family_id, const Slice& key,
+               const Slice& value) override {
+    std::string value_with_ts;
+    Status st = AppendTS(value, &value_with_ts, clock_);
+    if (!st.ok()) {
+      return st;
+    }
+    return WriteBatchInternal::Put(&updates_ttl, column_family_id, key,
+                                   value_with_ts);
+  }
+  Status MergeCF(uint32_t column_family_id, const Slice& key,
+                 const Slice& value) override {
+    std::string value_with_ts;
+    Status st = AppendTS(value, &value_with_ts, clock_);
+    if (!st.ok()) {
+      return st;
+    }
+    return WriteBatchInternal::Merge(&updates_ttl, column_family_id, key,
+                                     value_with_ts);
+  }
+  Status DeleteCF(uint32_t column_family_id, const Slice& key) override {
+    return WriteBatchInternal::Delete(&updates_ttl, column_family_id, key);
+  }
+  Status DeleteRangeCF(uint32_t column_family_id, const Slice& begin_key,
+                       const Slice& end_key) override {
+    return WriteBatchInternal::DeleteRange(&updates_ttl, column_family_id,
+                                           begin_key, end_key);
+  }
+  void LogData(const Slice& blob) override { updates_ttl.PutLogData(blob); }
+
+private:
+  SystemClock* clock_;
+};
+
 static std::unordered_map<std::string, OptionTypeInfo> ttl_merge_op_type_info =
     {{"user_operator",
       OptionTypeInfo::AsCustomSharedPtr<MergeOperator>(
@@ -499,6 +538,20 @@ Status DBWithTTLImpl::Put(const WriteOptions& options,
   return st;
 }
 
+async_result DBWithTTLImpl::AsyncPut(const WriteOptions& options,
+                                     ColumnFamilyHandle* column_family,
+                                     const Slice& key, const Slice& val) {
+  WriteBatch batch;
+  Status st = batch.Put(column_family, key, val);
+  if (!st.ok()) {
+    co_return st;
+  }
+
+  auto result = AsyncWrite(options, &batch);
+  co_await result;
+  co_return result.result();
+}
+
 Status DBWithTTLImpl::Get(const ReadOptions& options,
                           ColumnFamilyHandle* column_family, const Slice& key,
                           PinnableSlice* value) {
@@ -511,6 +564,24 @@ Status DBWithTTLImpl::Get(const ReadOptions& options,
     return st;
   }
   return StripTS(value);
+}
+
+async_result DBWithTTLImpl::AsyncGet(const ReadOptions& options,
+                                     ColumnFamilyHandle* column_family,
+                                     const Slice& key, PinnableSlice* value,
+                                     std::string* timestamp) {
+  auto result = db_->AsyncGet(options, column_family, key, value, timestamp);
+  co_await result;
+
+  auto status = result.result();
+  if (!status.ok()) {
+    co_return status;
+  }
+  status = SanityCheckTimestamp(*value);
+  if (!status.ok()) {
+    co_return status;
+  }
+  co_return StripTS(value);
 }
 
 std::vector<Status> DBWithTTLImpl::MultiGet(
@@ -529,6 +600,50 @@ std::vector<Status> DBWithTTLImpl::MultiGet(
     statuses[i] = StripTS(&(*values)[i]);
   }
   return statuses;
+}
+
+async_result DBWithTTLImpl::AsyncMultiGet(
+    const ReadOptions& options,
+    const std::vector<ColumnFamilyHandle*>& column_family,
+    const std::vector<Slice>& keys, std::vector<std::string>* values,
+    std::vector<std::string>* timestamps) {
+  auto result = db_->AsyncMultiGet(options, column_family, keys, values, timestamps);
+  co_await result;
+
+  auto statuses = result.results();
+  for (size_t i = 0; i < keys.size(); ++i) {
+    if (!statuses[i].ok()) {
+      continue;
+    }
+    statuses[i] = SanityCheckTimestamp((*values)[i]);
+    if (!statuses[i].ok()) {
+      continue;
+    }
+    statuses[i] = StripTS(&(*values)[i]);
+  }
+
+  co_return statuses;
+}
+
+async_result DBWithTTLImpl::AsyncMultiGet(const ReadOptions& options,
+                                          const std::vector<Slice>& keys,
+                                          std::vector<std::string>* values) {
+  auto result = db_->AsyncMultiGet(options, keys, values);
+  co_await result;
+
+  auto statuses = result.results();
+  for (size_t i = 0; i < keys.size(); ++i) {
+    if (!statuses[i].ok()) {
+      continue;
+    }
+    statuses[i] = SanityCheckTimestamp((*values)[i]);
+    if (!statuses[i].ok()) {
+      continue;
+    }
+    statuses[i] = StripTS(&(*values)[i]);
+  }
+
+  co_return statuses;
 }
 
 bool DBWithTTLImpl::KeyMayExist(const ReadOptions& options,
@@ -556,49 +671,25 @@ Status DBWithTTLImpl::Merge(const WriteOptions& options,
 }
 
 Status DBWithTTLImpl::Write(const WriteOptions& opts, WriteBatch* updates) {
-  class Handler : public WriteBatch::Handler {
-   public:
-    explicit Handler(SystemClock* clock) : clock_(clock) {}
-    WriteBatch updates_ttl;
-    Status PutCF(uint32_t column_family_id, const Slice& key,
-                 const Slice& value) override {
-      std::string value_with_ts;
-      Status st = AppendTS(value, &value_with_ts, clock_);
-      if (!st.ok()) {
-        return st;
-      }
-      return WriteBatchInternal::Put(&updates_ttl, column_family_id, key,
-                                     value_with_ts);
-    }
-    Status MergeCF(uint32_t column_family_id, const Slice& key,
-                   const Slice& value) override {
-      std::string value_with_ts;
-      Status st = AppendTS(value, &value_with_ts, clock_);
-      if (!st.ok()) {
-        return st;
-      }
-      return WriteBatchInternal::Merge(&updates_ttl, column_family_id, key,
-                                       value_with_ts);
-    }
-    Status DeleteCF(uint32_t column_family_id, const Slice& key) override {
-      return WriteBatchInternal::Delete(&updates_ttl, column_family_id, key);
-    }
-    Status DeleteRangeCF(uint32_t column_family_id, const Slice& begin_key,
-                         const Slice& end_key) override {
-      return WriteBatchInternal::DeleteRange(&updates_ttl, column_family_id,
-                                             begin_key, end_key);
-    }
-    void LogData(const Slice& blob) override { updates_ttl.PutLogData(blob); }
-
-   private:
-    SystemClock* clock_;
-  };
   Handler handler(GetEnv()->GetSystemClock().get());
   Status st = updates->Iterate(&handler);
   if (!st.ok()) {
     return st;
   } else {
     return db_->Write(opts, &(handler.updates_ttl));
+  }
+}
+
+async_result DBWithTTLImpl::AsyncWrite(const WriteOptions& options,
+                                       WriteBatch* updates) {
+  Handler handler(GetEnv()->GetSystemClock().get());
+  Status st = updates->Iterate(&handler);
+  if (!st.ok()) {
+    co_return st;
+  } else {
+    auto result = db_->AsyncWrite(options, &(handler.updates_ttl));
+    co_await result;
+    co_return result.result();
   }
 }
 

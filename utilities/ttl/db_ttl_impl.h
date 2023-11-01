@@ -29,6 +29,9 @@ struct ConfigOptions;
 class ObjectLibrary;
 class ObjectRegistry;
 class DBWithTTLImpl : public DBWithTTL {
+ private:
+  class Handler;
+
  public:
   static void SanitizeOptions(int32_t ttl, ColumnFamilyOptions* options,
                               SystemClock* clock);
@@ -36,7 +39,7 @@ class DBWithTTLImpl : public DBWithTTL {
   static void RegisterTtlClasses();
   explicit DBWithTTLImpl(DB* db);
 
-  virtual ~DBWithTTLImpl();
+  ~DBWithTTLImpl() override;
 
   virtual Status Close() override;
 
@@ -54,10 +57,21 @@ class DBWithTTLImpl : public DBWithTTL {
                      ColumnFamilyHandle* column_family, const Slice& key,
                      const Slice& val) override;
 
+  using StackableDB::AsyncPut;
+  virtual async_result AsyncPut(const WriteOptions& options,
+                                ColumnFamilyHandle* column_family,
+                                const Slice& key, const Slice& value) override;
+
   using StackableDB::Get;
   virtual Status Get(const ReadOptions& options,
                      ColumnFamilyHandle* column_family, const Slice& key,
                      PinnableSlice* value) override;
+
+  using StackableDB::AsyncGet;
+  virtual async_result AsyncGet(const ReadOptions& options,
+                                ColumnFamilyHandle* column_family,
+                                const Slice& key, PinnableSlice* value,
+                                std::string* timestamp) override;
 
   using StackableDB::MultiGet;
   virtual std::vector<Status> MultiGet(
@@ -65,6 +79,16 @@ class DBWithTTLImpl : public DBWithTTL {
       const std::vector<ColumnFamilyHandle*>& column_family,
       const std::vector<Slice>& keys,
       std::vector<std::string>* values) override;
+
+  using StackableDB::AsyncMultiGet;
+  virtual async_result AsyncMultiGet(const ReadOptions& options,
+                                     const std::vector<ColumnFamilyHandle*>& column_family,
+                                     const std::vector<Slice>& keys, std::vector<std::string>* values,
+                                     std::vector<std::string>* timestamps) override;
+
+  virtual async_result AsyncMultiGet(const ReadOptions& options,
+                                     const std::vector<Slice>& keys,
+                                     std::vector<std::string>* values) override;
 
   using StackableDB::KeyMayExist;
   virtual bool KeyMayExist(const ReadOptions& options,
@@ -78,6 +102,9 @@ class DBWithTTLImpl : public DBWithTTL {
                        const Slice& value) override;
 
   virtual Status Write(const WriteOptions& opts, WriteBatch* updates) override;
+
+  virtual async_result AsyncWrite(const WriteOptions& options,
+                                  WriteBatch* updates) override;
 
   using StackableDB::NewIterator;
   virtual Iterator* NewIterator(const ReadOptions& opts,

@@ -81,11 +81,28 @@ class StackableDB : public DB {
     return db_->Put(options, column_family, key, val);
   }
 
+  virtual async_result AsyncPut(const WriteOptions& options,
+                                ColumnFamilyHandle* column_family,
+                                const Slice& key, const Slice& value) override {
+    auto result = db_->AsyncPut(options, column_family, key, value);
+    co_await result;
+    co_return result.result();
+  }
+
   using DB::Get;
   virtual Status Get(const ReadOptions& options,
                      ColumnFamilyHandle* column_family, const Slice& key,
                      PinnableSlice* value) override {
     return db_->Get(options, column_family, key, value);
+  }
+
+  virtual async_result AsyncGet(const ReadOptions& options,
+                                ColumnFamilyHandle* column_family,
+                                const Slice& key, PinnableSlice* value,
+                                std::string* timestamp) override {
+    auto result = db_->AsyncGet(options, column_family, key, value, timestamp);
+    co_await result;
+    co_return result.result();
   }
 
   using DB::GetMergeOperands;
@@ -106,6 +123,25 @@ class StackableDB : public DB {
       const std::vector<Slice>& keys,
       std::vector<std::string>* values) override {
     return db_->MultiGet(options, column_family, keys, values);
+  }
+
+  using DB::AsyncMultiGet;
+  virtual async_result AsyncMultiGet(const ReadOptions& options,
+                                     const std::vector<ColumnFamilyHandle*>& column_family,
+                                     const std::vector<Slice>& keys, std::vector<std::string>* values,
+                                     std::vector<std::string>* timestamps) override {
+    auto result = db_->AsyncMultiGet(options, column_family, keys, values, timestamps);
+    co_await result;
+    co_return result.results();
+  }
+
+  virtual async_result AsyncMultiGet(const ReadOptions& options,
+                                     const std::vector<Slice>& keys,
+                                     std::vector<std::string>* values)
+  {
+    auto result = db_->AsyncMultiGet(options, keys, values);
+    co_await result;
+    co_return result.results();
   }
 
   virtual void MultiGet(const ReadOptions& options,
@@ -183,6 +219,13 @@ class StackableDB : public DB {
 
   virtual Status Write(const WriteOptions& opts, WriteBatch* updates) override {
     return db_->Write(opts, updates);
+  }
+
+  virtual async_result AsyncWrite(const WriteOptions& options,
+                                  WriteBatch* updates) override {
+    auto result = db_->AsyncWrite(options, updates);
+    co_await result;
+    co_return result.result();
   }
 
   using DB::NewIterator;
@@ -331,7 +374,21 @@ class StackableDB : public DB {
 
   virtual Status SyncWAL() override { return db_->SyncWAL(); }
 
+  virtual async_result AsSyncWAL() override
+  {
+    auto result = db_->AsSyncWAL();
+    co_await result;
+    co_return result.result();
+  }
+
   virtual Status FlushWAL(bool sync) override { return db_->FlushWAL(sync); }
+
+  virtual async_result AsyncFlushWAL(bool sync) override
+  {
+    auto result = db_->AsyncFlushWAL(sync);
+    co_await result;
+    co_return result.result();
+  }
 
   virtual Status LockWAL() override { return db_->LockWAL(); }
 
