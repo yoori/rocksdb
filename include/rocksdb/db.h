@@ -381,6 +381,16 @@ class DB {
   virtual Status Delete(const WriteOptions& options,
                         ColumnFamilyHandle* column_family,
                         const Slice& key) = 0;
+
+  virtual async_result AsyncDelete(const WriteOptions& options,
+                                   ColumnFamilyHandle* column_family,
+                                   const Slice& key) {
+    (void)options;
+    (void)column_family;
+    (void)key;
+    co_return Status::NotSupported("AsyncDelete() not implemented.");
+  }
+
   virtual Status Delete(const WriteOptions& options, const Slice& key) {
     return Delete(options, DefaultColumnFamily(), key);
   }

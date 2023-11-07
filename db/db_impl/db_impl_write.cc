@@ -3026,6 +3026,42 @@ Status DB::Delete(const WriteOptions& opt, ColumnFamilyHandle* column_family,
   return Write(opt, &batch);
 }
 
+async_result DBImpl::AsyncDelete(const WriteOptions& opt,
+                                 ColumnFamilyHandle* column_family,
+                                 const Slice& key) {
+  if (nullptr == opt.timestamp) {
+    WriteBatch batch;
+    const Status s = batch.Delete(column_family, key);
+    if (!s.ok()) {
+      co_return s;
+    }
+    auto result = AsyncWrite(opt, &batch);
+    co_await result;
+    co_return result.result();
+  }
+  const Slice* ts = opt.timestamp;
+  assert(ts != nullptr);
+  size_t ts_sz = ts->size();
+  assert(column_family->GetComparator());
+  assert(ts_sz == column_family->GetComparator()->timestamp_size());
+  WriteBatch batch;
+  Status s;
+  if (key.data() + key.size() == ts->data()) {
+    Slice key_with_ts = Slice(key.data(), key.size() + ts_sz);
+    s = batch.Delete(column_family, key_with_ts);
+  } else {
+    std::array<Slice, 2> key_with_ts_slices{{key, *ts}};
+    SliceParts key_with_ts(key_with_ts_slices.data(), 2);
+    s = batch.Delete(column_family, key_with_ts);
+  }
+  if (!s.ok()) {
+    co_return s;
+  }
+  auto result = AsyncWrite(opt, &batch);
+  co_await result;
+  co_return result.result();
+}
+
 Status DB::SingleDelete(const WriteOptions& opt,
                         ColumnFamilyHandle* column_family, const Slice& key) {
   Status s;

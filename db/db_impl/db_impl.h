@@ -165,6 +165,11 @@ class DBImpl : public DB {
   virtual Status Delete(const WriteOptions& options,
                         ColumnFamilyHandle* column_family,
                         const Slice& key) override;
+
+  virtual async_result AsyncDelete(const WriteOptions& options,
+                                   ColumnFamilyHandle* column_family,
+                                   const Slice& key) override;
+
   using DB::SingleDelete;
   virtual Status SingleDelete(const WriteOptions& options,
                               ColumnFamilyHandle* column_family,
