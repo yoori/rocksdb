@@ -203,6 +203,15 @@ class StackableDB : public DB {
     return db_->Delete(wopts, column_family, key);
   }
 
+  using DB::AsyncDelete;
+  virtual async_result AsyncDelete(const WriteOptions& wopts,
+                                   ColumnFamilyHandle* column_family,
+                                   const Slice& key) override {
+    auto result = db_->AsyncDelete(wopts, column_family, key);
+    co_await result;
+    co_return result.result();
+  }
+
   using DB::SingleDelete;
   virtual Status SingleDelete(const WriteOptions& wopts,
                               ColumnFamilyHandle* column_family,
