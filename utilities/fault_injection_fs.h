@@ -65,12 +65,14 @@ class TestFSWritableFile : public FSWritableFile {
   virtual ~TestFSWritableFile();
   virtual IOStatus Append(const Slice& data, const IOOptions&,
                           IODebugContext*) override;
-  virtual async_result AsyncAppend(const Slice& data, const IOOptions&,
+  virtual async_result AsyncAppend(const IOUringOptions* const /*io_uring_option*/,
+                                   const Slice& data,
                                    IODebugContext*) override {
     (void)data;
     throw "Not implemented";
   }
-  async_result AsyncAppend(const Slice& data, const IOOptions& /*options*/,
+  async_result AsyncAppend(const IOUringOptions* const /*io_uring_option*/,
+                           const Slice& data,
                            const DataVerificationInfo& /*verification_info*/,
                            IODebugContext* /*dbg*/) override {
     (void)data;

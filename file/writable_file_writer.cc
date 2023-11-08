@@ -358,7 +358,7 @@ IOStatus WritableFileWriter::Flush() {
 
 // write out the cached data to the OS cache or storage if direct I/O
 // enabled
-async_result WritableFileWriter::AsyncFlush() {
+async_result WritableFileWriter::AsyncFlush(const IOUringOptions* const io_uring_option) {
   IOStatus s;
   TEST_KILL_RANDOM_WITH_WEIGHT("WritableFileWriter::Flush:0", REDUCE_ODDS2);
 
@@ -367,11 +367,11 @@ async_result WritableFileWriter::AsyncFlush() {
 #ifndef ROCKSDB_LITE
       if (pending_sync_) {
         if (perform_data_verification_ && buffered_data_with_checksum_) {
-          auto result = AsyncWriteDirectWithChecksum();
+          auto result = AsyncWriteDirectWithChecksum(io_uring_option);
           co_await result;
           s = result.io_result();
         } else {
-          auto result = AsyncWriteDirect();
+          auto result = AsyncWriteDirect(io_uring_option);
           co_await result;
           s = result.io_result();
         }
@@ -379,13 +379,14 @@ async_result WritableFileWriter::AsyncFlush() {
 #endif  // !ROCKSDB_LITE
     } else {
       if (perform_data_verification_ && buffered_data_with_checksum_) {
-        auto result = AsyncWriteBufferedWithChecksum(buf_.BufferStart(),
+        auto result = AsyncWriteBufferedWithChecksum(io_uring_option,
+                                                     buf_.BufferStart(),
                                                      buf_.CurrentSize());
         co_await result;
         s = result.io_result();
       } else {
         auto result =
-            AsyncWriteBuffered(buf_.BufferStart(), buf_.CurrentSize());
+            AsyncWriteBuffered(io_uring_option, buf_.BufferStart(), buf_.CurrentSize());
         co_await result;
         s = result.io_result();
       }
@@ -437,7 +438,7 @@ async_result WritableFileWriter::AsyncFlush() {
       if (offset_sync_to > 0 &&
           offset_sync_to - last_sync_size_ >= bytes_per_sync_) {
         auto result =
-            AsRangeSync(last_sync_size_, offset_sync_to - last_sync_size_);
+            AsRangeSync(io_uring_option, last_sync_size_, offset_sync_to - last_sync_size_);
         co_await result;
         s = result.io_result();
         last_sync_size_ = offset_sync_to;
@@ -482,8 +483,8 @@ IOStatus WritableFileWriter::Sync(bool use_fsync) {
   return IOStatus::OK();
 }
 
-async_result WritableFileWriter::AsSync(bool use_fsync) {
-  auto result = AsyncFlush();
+async_result WritableFileWriter::AsSync(const IOUringOptions* const io_uring_option, bool use_fsync) {
+  auto result = AsyncFlush(io_uring_option);
   co_await result;
   IOStatus s = result.io_result();
   if (!s.ok()) {
@@ -491,7 +492,7 @@ async_result WritableFileWriter::AsSync(bool use_fsync) {
   }
   TEST_KILL_RANDOM("WritableFileWriter::Sync:0");
   if (!use_direct_io() && pending_sync_) {
-    auto res = AsSyncInternal(use_fsync);
+    auto res = AsSyncInternal(io_uring_option, use_fsync);
     co_await res;
     s = res.io_result();
     if (!s.ok()) {
@@ -515,14 +516,14 @@ IOStatus WritableFileWriter::SyncWithoutFlush(bool use_fsync) {
   return s;
 }
 
-async_result WritableFileWriter::AsSyncWithoutFlush(bool use_fsync) {
+async_result WritableFileWriter::AsSyncWithoutFlush(const IOUringOptions* const io_uring_option, bool use_fsync) {
   if (!writable_file_->IsSyncThreadSafe()) {
     co_return IOStatus::NotSupported(
         "Can't WritableFileWriter::SyncWithoutFlush() because "
         "WritableFile::IsSyncThreadSafe() is false");
   }
   TEST_SYNC_POINT("WritableFileWriter::SyncWithoutFlush:1");
-  auto result = AsSyncInternal(use_fsync);
+  auto result = AsSyncInternal(io_uring_option, use_fsync);
   co_await result;
   IOStatus s = result.io_result();
   TEST_SYNC_POINT("WritableFileWriter::SyncWithoutFlush:2");
@@ -558,7 +559,7 @@ IOStatus WritableFileWriter::SyncInternal(bool use_fsync) {
   return s;
 }
 
-async_result WritableFileWriter::AsSyncInternal(bool use_fsync) {
+async_result WritableFileWriter::AsSyncInternal(const IOUringOptions* const io_uring_option, bool use_fsync) {
   IOStatus s;
   IOSTATS_TIMER_GUARD(fsync_nanos);
   TEST_SYNC_POINT("WritableFileWriter::SyncInternal:0");
@@ -571,11 +572,11 @@ async_result WritableFileWriter::AsSyncInternal(bool use_fsync) {
   }
 #endif
   if (use_fsync) {
-    auto result = writable_file_->AsFsync(IOOptions(), nullptr);
+    auto result = writable_file_->AsFsync(io_uring_option, nullptr);
     co_await result;
     s = result.io_result();
   } else {
-    auto result = writable_file_->AsSync(IOOptions(), nullptr);
+    auto result = writable_file_->AsSync(io_uring_option, nullptr);
     co_await result;
     s = result.io_result();
   }
@@ -610,7 +611,7 @@ IOStatus WritableFileWriter::RangeSync(uint64_t offset, uint64_t nbytes) {
   return s;
 }
 
-async_result WritableFileWriter::AsRangeSync(uint64_t offset, uint64_t nbytes) {
+async_result WritableFileWriter::AsRangeSync(const IOUringOptions* const io_uring_option, uint64_t offset, uint64_t nbytes) {
   IOSTATS_TIMER_GUARD(range_sync_nanos);
   TEST_SYNC_POINT("WritableFileWriter::RangeSync:0");
 #ifndef ROCKSDB_LITE
@@ -620,7 +621,7 @@ async_result WritableFileWriter::AsRangeSync(uint64_t offset, uint64_t nbytes) {
   }
 #endif
   auto result =
-      writable_file_->AsRangeSync(offset, nbytes, IOOptions(), nullptr);
+      writable_file_->AsRangeSync(io_uring_option, offset, nbytes, nullptr);
   co_await result;
   IOStatus s = result.io_result();
 #ifndef ROCKSDB_LITE
@@ -700,7 +701,8 @@ IOStatus WritableFileWriter::WriteBuffered(const char* data, size_t size) {
   return s;
 }
 
-async_result WritableFileWriter::AsyncWriteBuffered(const char* data,
+async_result WritableFileWriter::AsyncWriteBuffered(const IOUringOptions* const io_uring_option,
+                                                    const char* data,
                                                     size_t size) {
   IOStatus s;
   assert(!use_direct_io());
@@ -739,12 +741,11 @@ async_result WritableFileWriter::AsyncWriteBuffered(const char* data,
           Crc32cHandoffChecksumCalculation(src, allowed, checksum_buf);
           v_info.checksum = Slice(checksum_buf, sizeof(uint32_t));
           auto result = writable_file_->AsyncAppend(
-              Slice(src, allowed), IOOptions(), v_info, nullptr);
+            io_uring_option, Slice(src, allowed), v_info, nullptr);
           co_await result;
           s = result.io_result();
         } else {
-          auto result = writable_file_->AsyncAppend(Slice(src, allowed),
-                                                    IOOptions(), nullptr);
+          auto result = writable_file_->AsyncAppend(io_uring_option, Slice(src, allowed), nullptr);
           co_await result;
           s = result.io_result();
         }
@@ -842,7 +843,7 @@ IOStatus WritableFileWriter::WriteBufferedWithChecksum(const char* data,
 }
 
 async_result WritableFileWriter::AsyncWriteBufferedWithChecksum(
-    const char* data, size_t size) {
+        const IOUringOptions* const io_uring_option, const char* data, size_t size) {
   IOStatus s;
   assert(!use_direct_io());
   assert(perform_data_verification_ && buffered_data_with_checksum_);
@@ -885,8 +886,7 @@ async_result WritableFileWriter::AsyncWriteBufferedWithChecksum(
 
       EncodeFixed32(checksum_buf, buffered_data_crc32c_checksum_);
       v_info.checksum = Slice(checksum_buf, sizeof(uint32_t));
-      auto result = writable_file_->AsyncAppend(Slice(src, left), IOOptions(),
-                                                v_info, nullptr);
+      auto result = writable_file_->AsyncAppend(io_uring_option, Slice(src, left), v_info, nullptr);
       co_await result;
       s = result.io_result();
       SetPerfLevel(prev_perf_level);
@@ -1024,7 +1024,7 @@ IOStatus WritableFileWriter::WriteDirect() {
   return s;
 }
 
-async_result WritableFileWriter::AsyncWriteDirect() {
+async_result WritableFileWriter::AsyncWriteDirect(const IOUringOptions* const io_uring_option) {
   assert(use_direct_io());
   IOStatus s;
   const size_t alignment = buf_.Alignment();
@@ -1071,12 +1071,12 @@ async_result WritableFileWriter::AsyncWriteDirect() {
         Crc32cHandoffChecksumCalculation(src, size, checksum_buf);
         v_info.checksum = Slice(checksum_buf, sizeof(uint32_t));
         auto result = writable_file_->AsyncPositionedAppend(
-            Slice(src, size), write_offset, IOOptions(), v_info, nullptr);
+            io_uring_option, Slice(src, size), write_offset, v_info, nullptr);
         co_await result;
         s = result.io_result();
       } else {
         auto result = writable_file_->AsyncPositionedAppend(
-            Slice(src, size), write_offset, IOOptions(), nullptr);
+            io_uring_option, Slice(src, size), write_offset, nullptr);
         co_await result;
         s = result.io_result();
       }
@@ -1206,7 +1206,7 @@ IOStatus WritableFileWriter::WriteDirectWithChecksum() {
   return s;
 }
 
-async_result WritableFileWriter::AsyncWriteDirectWithChecksum() {
+async_result WritableFileWriter::AsyncWriteDirectWithChecksum(const IOUringOptions* const io_uring_option) {
   assert(use_direct_io());
   assert(perform_data_verification_ && buffered_data_with_checksum_);
   IOStatus s;
@@ -1263,7 +1263,7 @@ async_result WritableFileWriter::AsyncWriteDirectWithChecksum() {
     EncodeFixed32(checksum_buf, buffered_data_crc32c_checksum_);
     v_info.checksum = Slice(checksum_buf, sizeof(uint32_t));
     auto result = writable_file_->AsyncPositionedAppend(
-        Slice(src, left), write_offset, IOOptions(), v_info, nullptr);
+        io_uring_option, Slice(src, left), write_offset, v_info, nullptr);
     co_await result;
     s = result.io_result();
 

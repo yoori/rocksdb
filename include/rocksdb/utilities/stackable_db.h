@@ -383,18 +383,18 @@ class StackableDB : public DB {
 
   virtual Status SyncWAL() override { return db_->SyncWAL(); }
 
-  virtual async_result AsSyncWAL() override
+  virtual async_result AsSyncWAL(const IOUringOptions* const io_uring_option) override
   {
-    auto result = db_->AsSyncWAL();
+    auto result = db_->AsSyncWAL(io_uring_option);
     co_await result;
     co_return result.result();
   }
 
   virtual Status FlushWAL(bool sync) override { return db_->FlushWAL(sync); }
 
-  virtual async_result AsyncFlushWAL(bool sync) override
+  virtual async_result AsyncFlushWAL(const IOUringOptions* const io_uring_option, bool sync) override
   {
-    auto result = db_->AsyncFlushWAL(sync);
+    auto result = db_->AsyncFlushWAL(io_uring_option, sync);
     co_await result;
     co_return result.result();
   }
