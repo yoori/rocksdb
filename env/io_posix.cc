@@ -121,7 +121,8 @@ bool PosixWrite(int fd, const char* buf, size_t nbyte) {
   return true;
 }
 
-async_result AsyncPosixWrite(const IOOptions& opts, int fd, const char* buf,
+async_result AsyncPosixWrite(const IOUringOptions* const io_uring_option,
+                             int fd, const char* buf,
                              size_t nbyte) {
   static const int PageSize = 4096;
   int pages = (int)std::ceil((float)nbyte / PageSize);
@@ -137,14 +138,14 @@ async_result AsyncPosixWrite(const IOOptions& opts, int fd, const char* buf,
 
   async_result a_result(true, data);
 
-  if (opts.io_uring_option->ioring != nullptr) {
-    auto sqe = io_uring_get_sqe(opts.io_uring_option->ioring);
+  if (io_uring_option->ioring != nullptr) {
+    auto sqe = io_uring_get_sqe(io_uring_option->ioring);
     io_uring_prep_writev(sqe, fd, data->iov, pages, 0);
     io_uring_sqe_set_data(sqe, data);
-    io_uring_submit(opts.io_uring_option->ioring);
+    io_uring_submit(io_uring_option->ioring);
     co_await a_result;
   } else {
-    opts.io_uring_option->delegate(nullptr, fd, 0, IOUringOptions::Ops::Write);
+    io_uring_option->delegate(nullptr, fd, 0, IOUringOptions::Ops::Write);
   }
 
   co_return true;
@@ -174,7 +175,7 @@ bool PosixPositionedWrite(int fd, const char* buf, size_t nbyte, off_t offset) {
   return true;
 }
 
-async_result AsyncPosixPositionedWrite(const IOOptions& opts, int fd,
+async_result AsyncPosixPositionedWrite(const IOUringOptions* const io_uring_option, int fd,
                                        const char* buf, size_t nbyte,
                                        off_t offset) {
   static const int PageSize = 4096;
@@ -190,15 +191,15 @@ async_result AsyncPosixPositionedWrite(const IOOptions& opts, int fd,
   }
 
   async_result a_result(true, data);
-  if (opts.io_uring_option->ioring != nullptr) {
-    auto sqe = io_uring_get_sqe(opts.io_uring_option->ioring);
+  if (io_uring_option->ioring != nullptr) {
+    auto sqe = io_uring_get_sqe(io_uring_option->ioring);
     io_uring_prep_writev(sqe, fd, data->iov, pages, offset);
     io_uring_sqe_set_data(sqe, data);
-    io_uring_submit(opts.io_uring_option->ioring);
+    io_uring_submit(io_uring_option->ioring);
     co_await a_result;
   } else {
-    opts.io_uring_option->delegate(nullptr, fd, offset,
-                                   IOUringOptions::Ops::Write);
+    io_uring_option->delegate(nullptr, fd, offset,
+                              IOUringOptions::Ops::Write);
   }
 
   co_return true;
@@ -1341,8 +1342,8 @@ IOStatus PosixWritableFile::Append(const Slice& data, const IOOptions& /*opts*/,
   return IOStatus::OK();
 }
 
-async_result PosixWritableFile::AsyncAppend(const Slice& data,
-                                            const IOOptions& opts,
+async_result PosixWritableFile::AsyncAppend(const IOUringOptions* const io_uring_option,
+                                            const Slice& data,
                                             IODebugContext* /*dbg*/) {
   if (use_direct_io()) {
     assert(IsSectorAligned(data.size(), GetRequiredBufferAlignment()));
@@ -1350,7 +1351,7 @@ async_result PosixWritableFile::AsyncAppend(const Slice& data,
   }
   const char* src = data.data();
   size_t nbytes = data.size();
-  auto result = AsyncPosixWrite(opts, fd_, src, nbytes);
+  auto result = AsyncPosixWrite(io_uring_option, fd_, src, nbytes);
   co_await result;
   if (!result.posix_result()) {
     co_return IOError("While appending to file", filename_, errno);
@@ -1379,9 +1380,9 @@ IOStatus PosixWritableFile::PositionedAppend(const Slice& data, uint64_t offset,
   return IOStatus::OK();
 }
 
-async_result PosixWritableFile::AsyncPositionedAppend(const Slice& data,
+async_result PosixWritableFile::AsyncPositionedAppend(const IOUringOptions* const io_uring_option,
+                                                      const Slice& data,
                                                       uint64_t offset,
-                                                      const IOOptions& opts,
                                                       IODebugContext* /*dbg*/) {
   if (use_direct_io()) {
     assert(IsSectorAligned(offset, GetRequiredBufferAlignment()));
@@ -1391,7 +1392,7 @@ async_result PosixWritableFile::AsyncPositionedAppend(const Slice& data,
   assert(offset <= static_cast<uint64_t>(std::numeric_limits<off_t>::max()));
   const char* src = data.data();
   size_t nbytes = data.size();
-  auto result = AsyncPosixPositionedWrite(opts, fd_, src, nbytes,
+  auto result = AsyncPosixPositionedWrite(io_uring_option, fd_, src, nbytes,
                                           static_cast<off_t>(offset));
   co_await result;
   if (!result.posix_result()) {
@@ -1485,7 +1486,7 @@ IOStatus PosixWritableFile::Sync(const IOOptions& /*opts*/,
   return IOStatus::OK();
 }
 
-async_result PosixWritableFile::AsSync(const IOOptions& /*opts*/,
+async_result PosixWritableFile::AsSync(const IOUringOptions* const /*io_uring_option*/,
                                        IODebugContext* /*dbg*/) {
   // TODO: use liburing？
   if (fdatasync(fd_) < 0) {
@@ -1502,7 +1503,7 @@ IOStatus PosixWritableFile::Fsync(const IOOptions& /*opts*/,
   return IOStatus::OK();
 }
 
-async_result PosixWritableFile::AsFsync(const IOOptions& /*opts*/,
+async_result PosixWritableFile::AsFsync(const IOUringOptions* const /*io_uring_option*/,
                                         IODebugContext* /*dbg*/) {
   // TODO: use liburing?
   if (fsync(fd_) < 0) {

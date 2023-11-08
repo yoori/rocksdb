@@ -14,6 +14,7 @@
 #include "db/log_format.h"
 #include "rocksdb/async_result.h"
 #include "rocksdb/io_status.h"
+#include "rocksdb/options.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/status.h"
 
@@ -82,7 +83,7 @@ class Writer {
 
   IOStatus AddRecord(const Slice& slice);
 
-  async_result AsyncAddRecord(const Slice& slice);
+  async_result AsyncAddRecord(const IOUringOptions* const io_uring_option, const Slice& slice);
 
   WritableFileWriter* file() { return dest_.get(); }
   const WritableFileWriter* file() const { return dest_.get(); }
@@ -91,7 +92,7 @@ class Writer {
 
   IOStatus WriteBuffer();
 
-  async_result AsyncWriteBuffer();
+  async_result AsyncWriteBuffer(const IOUringOptions* const io_uring_option);
 
   IOStatus Close();
 

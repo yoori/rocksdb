@@ -248,7 +248,8 @@ class PosixWritableFile : public FSWritableFile {
   virtual IOStatus Close(const IOOptions& opts, IODebugContext* dbg) override;
   virtual IOStatus Append(const Slice& data, const IOOptions& opts,
                           IODebugContext* dbg) override;
-  virtual async_result AsyncAppend(const Slice& data, const IOOptions& opts,
+  virtual async_result AsyncAppend(const IOUringOptions* const io_uring_option,
+                                   const Slice& data,
                                    IODebugContext* dbg) override;
   virtual IOStatus Append(const Slice& data, const IOOptions& opts,
                           const DataVerificationInfo& /* verification_info */,
@@ -256,18 +257,19 @@ class PosixWritableFile : public FSWritableFile {
     return Append(data, opts, dbg);
   }
   virtual async_result AsyncAppend(
-      const Slice& data, const IOOptions& opts,
+      const IOUringOptions* const io_uring_option,
+      const Slice& data,
       const DataVerificationInfo& /* verification_info */,
       IODebugContext* dbg) override {
-    auto result = AsyncAppend(data, opts, dbg);
+    auto result = AsyncAppend(io_uring_option, data, dbg);
     co_await result;
     co_return result.io_result();
   }
   virtual IOStatus PositionedAppend(const Slice& data, uint64_t offset,
                                     const IOOptions& opts,
                                     IODebugContext* dbg) override;
-  virtual async_result AsyncPositionedAppend(const Slice& data, uint64_t offset,
-                                             const IOOptions& opts,
+  virtual async_result AsyncPositionedAppend(const IOUringOptions* const io_uring_option,
+                                             const Slice& data, uint64_t offset,
                                              IODebugContext* dbg) override;
   virtual IOStatus PositionedAppend(
       const Slice& data, uint64_t offset, const IOOptions& opts,
@@ -276,19 +278,20 @@ class PosixWritableFile : public FSWritableFile {
     return PositionedAppend(data, offset, opts, dbg);
   }
   virtual async_result AsyncPositionedAppend(
-      const Slice& data, uint64_t offset, const IOOptions& opts,
+      const IOUringOptions* const io_uring_option,
+      const Slice& data, uint64_t offset,
       const DataVerificationInfo& /* verification_info */,
       IODebugContext* dbg) override {
-    auto result = AsyncPositionedAppend(data, offset, opts, dbg);
+    auto result = AsyncPositionedAppend(io_uring_option, data, offset, dbg);
     co_await result;
     co_return result.io_result();
   }
   virtual IOStatus Flush(const IOOptions& opts, IODebugContext* dbg) override;
   virtual IOStatus Sync(const IOOptions& opts, IODebugContext* dbg) override;
-  virtual async_result AsSync(const IOOptions& opts,
+  virtual async_result AsSync(const IOUringOptions* const io_uring_option,
                               IODebugContext* dbg) override;
   virtual IOStatus Fsync(const IOOptions& opts, IODebugContext* dbg) override;
-  virtual async_result AsFsync(const IOOptions& opts,
+  virtual async_result AsFsync(const IOUringOptions* const io_uring_option,
                                IODebugContext* dbg) override;
   virtual bool IsSyncThreadSafe() const override;
   virtual bool use_direct_io() const override { return use_direct_io_; }
@@ -385,10 +388,10 @@ class PosixMmapFile : public FSWritableFile {
   virtual IOStatus Close(const IOOptions& opts, IODebugContext* dbg) override;
   virtual IOStatus Append(const Slice& data, const IOOptions& opts,
                           IODebugContext* dbg) override;
-  virtual async_result AsyncAppend(const Slice& data, const IOOptions& opts,
+  virtual async_result AsyncAppend(const IOUringOptions* const io_uring_option, const Slice& data,
                                    IODebugContext* dbg) override {
     (void)data;
-    (void)opts;
+    (void)io_uring_option;
     (void)dbg;
     throw "Not implemented";
   }
@@ -398,10 +401,11 @@ class PosixMmapFile : public FSWritableFile {
     return Append(data, opts, dbg);
   }
   virtual async_result AsyncAppend(
-      const Slice& data, const IOOptions& opts,
+      const IOUringOptions* const io_uring_option,
+      const Slice& data,
       const DataVerificationInfo& /* verification_info */,
       IODebugContext* dbg) override {
-    auto result = AsyncAppend(data, opts, dbg);
+    auto result = AsyncAppend(io_uring_option, data, dbg);
     co_await result;
     co_return result.io_result();
   }

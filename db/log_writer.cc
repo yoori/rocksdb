@@ -39,8 +39,8 @@ Writer::~Writer() {
 
 IOStatus Writer::WriteBuffer() { return dest_->Flush(); }
 
-async_result Writer::AsyncWriteBuffer() {
-  auto result = dest_->AsyncFlush();
+async_result Writer::AsyncWriteBuffer(const IOUringOptions* const io_uring_option) {
+  auto result = dest_->AsyncFlush(io_uring_option);
   co_await result;
   co_return result.io_result();
 }
@@ -118,7 +118,7 @@ IOStatus Writer::AddRecord(const Slice& slice) {
   return s;
 }
 
-async_result Writer::AsyncAddRecord(const Slice& slice) {
+async_result Writer::AsyncAddRecord(const IOUringOptions* const io_uring_option, const Slice& slice) {
   const char* ptr = slice.data();
   size_t left = slice.size();
 
@@ -175,7 +175,7 @@ async_result Writer::AsyncAddRecord(const Slice& slice) {
 
   if (s.ok()) {
     if (!manual_flush_) {
-      auto result = dest_->AsyncFlush();
+      auto result = dest_->AsyncFlush(io_uring_option);
       co_await result;
       s = result.io_result();
     }

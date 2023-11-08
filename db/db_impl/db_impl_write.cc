@@ -743,7 +743,7 @@ async_result DBImpl::AsyncWriteImpl(const WriteOptions& write_options,
       if (status.ok() && !write_options.disableWAL) {
         PERF_TIMER_GUARD(write_wal_time);
         auto result =
-            AsyncWriteToWAL(write_group, log_writer, log_used, need_log_sync,
+            AsyncWriteToWAL(write_options.io_uring_option, write_group, log_writer, log_used, need_log_sync,
                             need_log_dir_sync, last_sequence + 1);
         co_await result;
         io_s = result.io_result();
@@ -753,7 +753,7 @@ async_result DBImpl::AsyncWriteImpl(const WriteOptions& write_options,
         PERF_TIMER_GUARD(write_wal_time);
         // LastAllocatedSequence is increased inside WriteToWAL under
         // wal_write_mutex_ to ensure ordered events in WAL
-        auto result = AsyncConcurrentWriteToWAL(write_group, log_used,
+        auto result = AsyncConcurrentWriteToWAL(write_options.io_uring_option, write_group, log_used,
                                                 &last_sequence, seq_inc);
         co_await result;
         io_s = result.io_result();
@@ -859,11 +859,11 @@ async_result DBImpl::AsyncWriteImpl(const WriteOptions& write_options,
     // hence provide a simple implementation that is not necessarily efficient.
     if (two_write_queues_) {
       if (manual_wal_flush_) {
-        auto result = AsyncFlushWAL(true);
+        auto result = AsyncFlushWAL(write_options.io_uring_option, true);
         co_await result;
         status = result.result();
       } else {
-        auto result = AsSyncWAL();
+        auto result = AsSyncWAL(write_options.io_uring_option);
         co_await result;
         status = result.result();
       }
@@ -1126,7 +1126,7 @@ async_result DBImpl::AsyncPipelinedWriteImpl(
         RecordTick(stats_, WRITE_DONE_BY_OTHER, wal_write_group.size - 1);
       }
       auto result =
-          AsyncWriteToWAL(wal_write_group, log_writer, log_used, need_log_sync,
+          AsyncWriteToWAL(write_options.io_uring_option, wal_write_group, log_writer, log_used, need_log_sync,
                           need_log_dir_sync, current_sequence);
       co_await result;
       io_s = result.io_result();
@@ -1551,7 +1551,7 @@ async_result DBImpl::AsyncWriteImplWALOnly(
   IOStatus io_s;
   io_s.PermitUncheckedError();  // Allow io_s to be uninitialized
   if (!write_options.disableWAL) {
-    auto result = AsyncConcurrentWriteToWAL(write_group, log_used,
+    auto result = AsyncConcurrentWriteToWAL(write_options.io_uring_option, write_group, log_used,
                                             &last_sequence, seq_inc);
     co_await result;
     io_s = result.io_result();
@@ -1582,11 +1582,11 @@ async_result DBImpl::AsyncWriteImplWALOnly(
     // Requesting sync with two_write_queues_ is expected to be very rare. We
     // hance provide a simple implementation that is not necessarily efficient.
     if (manual_wal_flush_) {
-      auto result = AsyncFlushWAL(true);
+      auto result = AsyncFlushWAL(write_options.io_uring_option, true);
       co_await result;
       status = result.result();
     } else {
-      auto result = AsSyncWAL();
+      auto result = AsSyncWAL(write_options.io_uring_option);
       co_await result;
       status = result.result();
     }
@@ -1861,7 +1861,8 @@ IOStatus DBImpl::WriteToWAL(const WriteBatch& merged_batch,
   return io_s;
 }
 
-async_result DBImpl::AsyncWriteToWAL(const WriteBatch& merged_batch,
+async_result DBImpl::AsyncWriteToWAL(const IOUringOptions* const io_uring_option,
+                                     const WriteBatch& merged_batch,
                                      log::Writer* log_writer,
                                      uint64_t* log_used, uint64_t* log_size) {
   assert(log_size != nullptr);
@@ -1879,7 +1880,7 @@ async_result DBImpl::AsyncWriteToWAL(const WriteBatch& merged_batch,
     log_write_mutex_.Lock();
   }
 
-  auto result = log_writer->AsyncAddRecord(log_entry);
+  auto result = log_writer->AsyncAddRecord(io_uring_option, log_entry);
   co_await result;
   IOStatus io_s = result.io_result();
 
@@ -1982,7 +1983,8 @@ IOStatus DBImpl::WriteToWAL(const WriteThread::WriteGroup& write_group,
   return io_s;
 }
 
-async_result DBImpl::AsyncWriteToWAL(const WriteThread::WriteGroup& write_group,
+async_result DBImpl::AsyncWriteToWAL(const IOUringOptions* const io_uring_option,
+                                     const WriteThread::WriteGroup& write_group,
                                      log::Writer* log_writer,
                                      uint64_t* log_used, bool need_log_sync,
                                      bool need_log_dir_sync,
@@ -2005,7 +2007,7 @@ async_result DBImpl::AsyncWriteToWAL(const WriteThread::WriteGroup& write_group,
   WriteBatchInternal::SetSequence(merged_batch, sequence);
 
   uint64_t log_size;
-  auto result = AsyncWriteToWAL(*merged_batch, log_writer, log_used, &log_size);
+  auto result = AsyncWriteToWAL(io_uring_option, *merged_batch, log_writer, log_used, &log_size);
   co_await result;
   io_s = result.io_result();
   if (to_be_cached_state) {
@@ -2023,7 +2025,7 @@ async_result DBImpl::AsyncWriteToWAL(const WriteThread::WriteGroup& write_group,
     //  - as long as other threads don't modify it, it's safe to read
     //    from std::deque from multiple threads concurrently.
     for (auto& log : logs_) {
-      auto res = log.writer->file()->AsSync(immutable_db_options_.use_fsync);
+      auto res = log.writer->file()->AsSync(io_uring_option, immutable_db_options_.use_fsync);
       co_await res;
       io_s = res.io_result();
       if (!io_s.ok()) {
@@ -2106,6 +2108,7 @@ IOStatus DBImpl::ConcurrentWriteToWAL(
 }
 
 async_result DBImpl::AsyncConcurrentWriteToWAL(
+    const IOUringOptions* const io_uring_option,
     const WriteThread::WriteGroup& write_group, uint64_t* log_used,
     SequenceNumber* last_sequence, size_t seq_inc) {
   IOStatus io_s;
@@ -2134,7 +2137,7 @@ async_result DBImpl::AsyncConcurrentWriteToWAL(
 
   log::Writer* log_writer = logs_.back().writer;
   uint64_t log_size;
-  auto result = AsyncWriteToWAL(*merged_batch, log_writer, log_used, &log_size);
+  auto result = AsyncWriteToWAL(io_uring_option, *merged_batch, log_writer, log_used, &log_size);
   co_await result;
   io_s = result.io_result();
   if (to_be_cached_state) {

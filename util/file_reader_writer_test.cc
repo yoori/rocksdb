@@ -40,11 +40,11 @@ TEST_F(WritableFileWriterTest, RangeSync) {
       return IOStatus::OK();
     }
     using FSWritableFile::AsyncAppend;
-    virtual async_result AsyncAppend(const Slice& data,
-                                     const IOOptions& options,
+    virtual async_result AsyncAppend(const IOUringOptions* const io_uring_option,
+                                     const Slice& data,
                                      IODebugContext* dbg) override {
       (void)data;
-      (void)options;
+      (void)io_uring_option;
       (void)dbg;
       throw "Not implemented";
     }
@@ -154,11 +154,11 @@ TEST_F(WritableFileWriterTest, IncrementalBuffer) {
       return IOStatus::OK();
     }
     using FSWritableFile::AsyncAppend;
-    virtual async_result AsyncAppend(const Slice& data,
-                                     const IOOptions& options,
+    virtual async_result AsyncAppend(const IOUringOptions* const io_uring_option,
+                                     const Slice& data,
                                      IODebugContext* dbg) override {
       (void)data;
-      (void)options;
+      (void)io_uring_option;
       (void)dbg;
       throw "Not implemented";
     }
@@ -453,10 +453,11 @@ TEST_F(WritableFileWriterTest, AppendStatusReturn) {
       return IOStatus::OK();
     }
     using FSWritableFile::AsyncAppend;
-    async_result AsyncAppend(const Slice& data, const IOOptions& options,
+    async_result AsyncAppend(const IOUringOptions* const io_uring_option,
+                             const Slice& data,
                              IODebugContext* dbg) override {
       (void)data;
-      (void)options;
+      (void)io_uring_option;
       (void)dbg;
       throw "Not implemented";
     }

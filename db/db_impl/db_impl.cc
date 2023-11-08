@@ -1332,14 +1332,14 @@ Status DBImpl::FlushWAL(bool sync) {
   return SyncWAL();
 }
 
-async_result DBImpl::AsyncFlushWAL(bool sync) {
+async_result DBImpl::AsyncFlushWAL(const IOUringOptions* const io_uring_option, bool sync) {
   if (manual_wal_flush_) {
     IOStatus io_s;
     {
       // We need to lock log_write_mutex_ since logs_ might change concurrently
       InstrumentedMutexLock wl(&log_write_mutex_);
       log::Writer* cur_log_writer = logs_.back().writer;
-      auto result = cur_log_writer->AsyncWriteBuffer();
+      auto result = cur_log_writer->AsyncWriteBuffer(io_uring_option);
       co_await result;
       io_s = result.io_result();
     }
@@ -1362,7 +1362,7 @@ async_result DBImpl::AsyncFlushWAL(bool sync) {
   }
   // sync = true
   ROCKS_LOG_DEBUG(immutable_db_options_.info_log, "FlushWAL sync=true");
-  auto result = AsSyncWAL();
+  auto result = AsSyncWAL(io_uring_option);
   co_await result;
   co_return result.result();
 }
@@ -1442,7 +1442,7 @@ Status DBImpl::SyncWAL() {
   return status;
 }
 
-async_result DBImpl::AsSyncWAL() {
+async_result DBImpl::AsSyncWAL(const IOUringOptions* const io_uring_option) {
   autovector<log::Writer*, 1> logs_to_sync;
   bool need_log_dir_sync;
   uint64_t current_log_number;
@@ -1486,7 +1486,7 @@ async_result DBImpl::AsSyncWAL() {
   IOStatus io_s;
   for (log::Writer* log : logs_to_sync) {
     auto result =
-        log->file()->AsSyncWithoutFlush(immutable_db_options_.use_fsync);
+        log->file()->AsSyncWithoutFlush(io_uring_option, immutable_db_options_.use_fsync);
     co_await result;
     io_s = result.io_result();
     if (!io_s.ok()) {

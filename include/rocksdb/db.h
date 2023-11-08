@@ -1389,7 +1389,7 @@ class DB {
   virtual Status FlushWAL(bool /*sync*/) {
     return Status::NotSupported("FlushWAL not implemented");
   }
-  virtual async_result AsyncFlushWAL(bool /*sync*/) {
+  virtual async_result AsyncFlushWAL(const IOUringOptions* const io_uring_option, bool /*sync*/) {
     co_return Status::NotSupported("FlushWAL not implemented");
   }
   // Sync the wal. Note that Write() followed by SyncWAL() is not exactly the
@@ -1398,7 +1398,7 @@ class DB {
   // Currently only works if allow_mmap_writes = false in Options.
   virtual Status SyncWAL() = 0;
 
-  virtual async_result AsSyncWAL() {
+  virtual async_result AsSyncWAL(const IOUringOptions* const io_uring_option) {
     co_return Status::NotSupported("AsSyncWAL not implemented");
   }
   // Lock the WAL. Also flushes the WAL after locking.

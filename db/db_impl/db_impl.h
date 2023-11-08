@@ -370,10 +370,10 @@ class DBImpl : public DB {
       const FlushOptions& options,
       const std::vector<ColumnFamilyHandle*>& column_families) override;
   virtual Status FlushWAL(bool sync) override;
-  virtual async_result AsyncFlushWAL(bool sync) override;
+  virtual async_result AsyncFlushWAL(const IOUringOptions* const io_uring_option, bool sync) override;
   bool TEST_WALBufferIsEmpty(bool lock = true);
   virtual Status SyncWAL() override;
-  virtual async_result AsSyncWAL() override;
+  virtual async_result AsSyncWAL(const IOUringOptions* const io_uring_option) override;
   virtual Status LockWAL() override;
   virtual Status UnlockWAL() override;
 
@@ -1771,7 +1771,8 @@ class DBImpl : public DB {
   IOStatus WriteToWAL(const WriteBatch& merged_batch, log::Writer* log_writer,
                       uint64_t* log_used, uint64_t* log_size);
 
-  async_result AsyncWriteToWAL(const WriteBatch& merged_batch,
+  async_result AsyncWriteToWAL(const IOUringOptions* const io_uring_option,
+                               const WriteBatch& merged_batch,
                                log::Writer* log_writer, uint64_t* log_used,
                                uint64_t* log_size);
 
@@ -1780,7 +1781,8 @@ class DBImpl : public DB {
                       bool need_log_sync, bool need_log_dir_sync,
                       SequenceNumber sequence);
 
-  async_result AsyncWriteToWAL(const WriteThread::WriteGroup& write_group,
+  async_result AsyncWriteToWAL(const IOUringOptions* const io_uring_option,
+                               const WriteThread::WriteGroup& write_group,
                                log::Writer* log_writer, uint64_t* log_used,
                                bool need_log_sync, bool need_log_dir_sync,
                                SequenceNumber sequence);
@@ -1790,6 +1792,7 @@ class DBImpl : public DB {
                                 SequenceNumber* last_sequence, size_t seq_inc);
 
   async_result AsyncConcurrentWriteToWAL(
+      const IOUringOptions* const io_uring_option,
       const WriteThread::WriteGroup& write_group, uint64_t* log_used,
       SequenceNumber* last_sequence, size_t seq_inc);
 

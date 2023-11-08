@@ -174,16 +174,18 @@ class StringSink : public FSWritableFile {
     contents_.append(slice.data(), slice.size());
     return IOStatus::OK();
   }
-  async_result AsyncAppend(const Slice& slice, const IOOptions& /*opts*/,
+  async_result AsyncAppend(const IOUringOptions* const /*io_uring_option*/,
+                           const Slice& slice,
                            IODebugContext* /*dbg*/) override {
     (void)slice;
     throw "Not implemented";
   }
-  async_result AsyncAppend(const Slice& data, const IOOptions& options,
+  async_result AsyncAppend(const IOUringOptions* const io_uring_option,
+                           const Slice& data,
                            const DataVerificationInfo& /* verification_info */,
                            IODebugContext* dbg) override {
     (void)data;
-    (void)options;
+    (void)io_uring_option;
     (void)dbg;
     throw "Not implemented";
   }
@@ -287,16 +289,18 @@ class OverwritingStringSink : public FSWritableFile {
     contents_.append(slice.data(), slice.size());
     return IOStatus::OK();
   }
-  async_result AsyncAppend(const Slice& slice, const IOOptions& /*opts*/,
+  async_result AsyncAppend(const IOUringOptions* const /*io_uring_option*/,
+                           const Slice& slice,
                            IODebugContext* /*dbg*/) override {
     (void)slice;
     throw "Not implemented";
   }
-  async_result AsyncAppend(const Slice& data, const IOOptions& options,
+  async_result AsyncAppend(const IOUringOptions* const io_uring_option,
+                           const Slice& data,
                            const DataVerificationInfo& /* verification_info */,
                            IODebugContext* dbg) override {
     (void)data;
-    (void)options;
+    (void)io_uring_option;
     (void)dbg;
     throw "Not implemented";
   }
@@ -585,21 +589,22 @@ class StringFS : public FileSystemWrapper {
       return IOStatus::OK();
     }
 
-    virtual async_result AsyncAppend(const Slice& data,
-                                     const IOOptions& options,
+    virtual async_result AsyncAppend(const IOUringOptions* const io_uring_option,
+                                     const Slice& data,
                                      IODebugContext* dbg) {
       (void)data;
-      (void)options;
+      (void)io_uring_option;
       (void)dbg;
       throw "not implemented";
     }
 
     virtual async_result AsyncAppend(
-        const Slice& data, const IOOptions& opts,
+            const IOUringOptions* const io_uring_option,
+        const Slice& data,
         const DataVerificationInfo& /* verification_info */,
         IODebugContext* dbg) override {
       (void)data;
-      (void)opts;
+      (void)io_uring_option;
       (void)dbg;
       throw "not implemented";
     }
