@@ -52,6 +52,10 @@ struct async_result {
 
     void unhandled_exception() { std::exit(1); }
 
+    void return_value(std::nullptr_t)
+    {
+    }
+
     void return_value(Status result) {
       ret_back_promise->result_ = result;
       ret_back_promise->result_set_ = true;
