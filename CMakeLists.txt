@@ -62,6 +62,7 @@ if(CCACHE_FOUND)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
 endif(CCACHE_FOUND)
 
+option(WHITH_CACH "build with cach" ON)
 option(WITH_JEMALLOC "build with JeMalloc" OFF)
 option(WITH_LIBURING "build with liburing" ON)
 option(WITH_SNAPPY "build with SNAPPY" OFF)
@@ -1012,11 +1013,17 @@ endif()
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
   ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+if (WHITH_CACH)
+  target_compile_definitions(${ROCKSDB_STATIC_LIB} PRIVATE ROCKSDB_CACH_ENABLE=1)
+endif()
 
 if(ROCKSDB_BUILD_SHARED)
   add_library(${ROCKSDB_SHARED_LIB} SHARED ${SOURCES} ${BUILD_VERSION_CC})
   target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE
     ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+  if (WHITH_CACH)
+      target_compile_definitions(${ROCKSDB_SHARED_LIB} PRIVATE ROCKSDB_CACH_ENABLE=1)
+  endif()
 
   if(WIN32)
     set_target_properties(${ROCKSDB_SHARED_LIB} PROPERTIES

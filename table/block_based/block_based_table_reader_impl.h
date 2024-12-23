@@ -150,11 +150,15 @@ async_result BlockBasedTable::AsyncNewDataBlockIterator(
                                       ? *uncompression_dict.GetValue()
                                       : UncompressionDict::GetEmptyDict();
 
+  bool use_cache = false;
+#ifdef ROCKSDB_CACH_ENABLE
+  use_cache = true;
+#endif
   CachableEntry<Block> block;
   auto result =
       AsyncRetrieveBlock(prefetch_buffer, ro, handle, dict, &block, block_type,
                          get_context, lookup_context, for_compaction,
-                         /* use_cache */ true, /* wait_for_cache */ true);
+                         use_cache, /* wait_for_cache */ true);
   co_await result;
   s = result.result();
 

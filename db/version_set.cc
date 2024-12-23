@@ -2315,6 +2315,7 @@ async_result Version::AsyncGet(const ReadOptions& read_options,
     if (LIKELY(value != nullptr)) {
       value->PinSelf();
     }
+    co_return Status::OK();
   } else {
     if (key_exists != nullptr) {
       *key_exists = false;
@@ -2322,6 +2323,9 @@ async_result Version::AsyncGet(const ReadOptions& read_options,
     *status = Status::NotFound();  // Use an empty error message for speed
     co_return Status::NotFound();
   }
+
+  *status = Status::OK();
+  co_return Status::OK();
 }
 
 void Version::MultiGet(const ReadOptions& read_options, MultiGetRange* range,
