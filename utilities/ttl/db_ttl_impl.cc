@@ -565,27 +565,32 @@ Status DBWithTTLImpl::Merge(const WriteOptions& options,
 Status DBWithTTLImpl::Write(const WriteOptions& opts, WriteBatch* updates) {
   class Handler : public WriteBatch::Handler {
    public:
-    explicit Handler(SystemClock* clock) : clock_(clock) {}
-    WriteBatch updates_ttl;
+    Handler(SystemClock* clock, size_t reserved_bytes)
+        : updates_ttl(reserved_bytes), clock_(clock) {}
+
     Status PutCF(uint32_t column_family_id, const Slice& key,
                  const Slice& value) override {
-      std::string value_with_ts;
-      Status st = AppendTS(value, &value_with_ts, clock_);
+      Status st = PrepareTimestamp();
       if (!st.ok()) {
         return st;
       }
-      return WriteBatchInternal::Put(&updates_ttl, column_family_id, key,
-                                     value_with_ts);
+
+      const Slice value_parts[] = {value, Slice(timestamp_, kTSLength)};
+      return WriteBatchInternal::Put(&updates_ttl, column_family_id,
+                                     SliceParts(&key, 1),
+                                     SliceParts(value_parts, 2));
     }
     Status MergeCF(uint32_t column_family_id, const Slice& key,
                    const Slice& value) override {
-      std::string value_with_ts;
-      Status st = AppendTS(value, &value_with_ts, clock_);
+      Status st = PrepareTimestamp();
       if (!st.ok()) {
         return st;
       }
-      return WriteBatchInternal::Merge(&updates_ttl, column_family_id, key,
-                                       value_with_ts);
+
+      const Slice value_parts[] = {value, Slice(timestamp_, kTSLength)};
+      return WriteBatchInternal::Merge(&updates_ttl, column_family_id,
+                                       SliceParts(&key, 1),
+                                       SliceParts(value_parts, 2));
     }
     Status DeleteCF(uint32_t column_family_id, const Slice& key) override {
       return WriteBatchInternal::Delete(&updates_ttl, column_family_id, key);
@@ -597,10 +602,34 @@ Status DBWithTTLImpl::Write(const WriteOptions& opts, WriteBatch* updates) {
     }
     void LogData(const Slice& blob) override { updates_ttl.PutLogData(blob); }
 
+    WriteBatch updates_ttl;
+
    private:
+    Status PrepareTimestamp() {
+      if (!timestamp_initialized_) {
+        int64_t current_time;
+        Status st = clock_->GetCurrentTime(&current_time);
+        if (!st.ok()) {
+          return st;
+        }
+
+        EncodeFixed32(timestamp_, static_cast<int32_t>(current_time));
+        timestamp_initialized_ = true;
+      }
+
+      return Status::OK();
+    }
+
     SystemClock* clock_;
+    char timestamp_[kTSLength];
+    bool timestamp_initialized_ = false;
   };
-  Handler handler(GetEnv()->GetSystemClock().get());
+
+  // Appending a timestamp can also grow the value-length varint by one byte.
+  const size_t reserved_bytes =
+      updates->GetDataSize() +
+      static_cast<size_t>(updates->Count()) * (kTSLength + 1);
+  Handler handler(GetEnv()->GetSystemClock().get(), reserved_bytes);
   Status st = updates->Iterate(&handler);
   if (!st.ok()) {
     return st;
