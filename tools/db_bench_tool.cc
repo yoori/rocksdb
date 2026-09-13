@@ -111,9 +111,9 @@
 #endif
 
 #if USE_COROUTINES
-#include "folly/coro/Baton.h"
-#include "folly/coro/CurrentExecutor.h"
-#include "folly/coro/Task.h"
+#include "folly/experimental/coro/Baton.h"
+#include "folly/experimental/coro/CurrentExecutor.h"
+#include "folly/experimental/coro/Task.h"
 #include "folly/executors/IOExecutor.h"
 #include "folly/futures/Future.h"
 #include "folly/io/async/EventBase.h"
@@ -7842,7 +7842,7 @@ class Benchmark {
     futures.reserve(num_jobs);
     for (int j = 0; j < num_jobs; ++j) {
       futures.push_back(
-          folly::coro::co_withExecutor(
+          folly::coro::co_viaIfAsync(
               folly::Executor::getKeepAliveToken(read_executor->getEventBase()),
               ReadRandomCoroutineJob(thread->rand.Next(), ops, &total_ops,
                                      &total_found, &total_bytes, j,
@@ -7917,7 +7917,7 @@ class Benchmark {
     futures.reserve(num_jobs);
     for (int j = 0; j < num_jobs; ++j) {
       futures.push_back(
-          folly::coro::co_withExecutor(
+          folly::coro::co_viaIfAsync(
               folly::Executor::getKeepAliveToken(read_executor->getEventBase()),
               MultiGetAsyncCoroutineJob(db, cfh, thread->rand.Next(), ops,
                                         &total_ops, &total_found, &total_bytes,

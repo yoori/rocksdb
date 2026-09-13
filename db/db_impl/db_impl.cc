@@ -17,7 +17,7 @@
 
 #if USE_COROUTINES
 #include "folly/Executor.h"
-#include "folly/coro/Invoke.h"
+#include "folly/experimental/coro/Invoke.h"
 #include "folly/executors/IOExecutor.h"
 #include "folly/io/async/EventBase.h"
 #endif  // USE_COROUTINES
@@ -7640,9 +7640,7 @@ void DBImpl::GetAsync(const ReadOptions& options,
     }(CaptureCoroutineStatsConfigForCallback(stats_enabled), this, options,
                                                  column_family, key, value,
                                                  timestamp, status, callback);
-    folly::coro::co_withExecutor(
-        folly::Executor::getKeepAliveToken(read_event_base), std::move(task))
-        .start();
+    std::move(task).scheduleOn(folly::Executor::getKeepAliveToken(read_event_base)).start();
     return;
   }
 #endif  // USE_COROUTINES
@@ -7692,9 +7690,7 @@ void DBImpl::MultiGetAsync(const ReadOptions& options, const size_t num_keys,
     }(CaptureCoroutineStatsConfigForCallback(stats_enabled), this, options,
         num_keys, column_families, keys, values, timestamps, statuses,
         sorted_input, callback);
-    folly::coro::co_withExecutor(
-        folly::Executor::getKeepAliveToken(read_event_base), std::move(task))
-        .start();
+    std::move(task).scheduleOn(folly::Executor::getKeepAliveToken(read_event_base)).start();
     return;
   }
 #endif  // USE_COROUTINES

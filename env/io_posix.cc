@@ -48,7 +48,7 @@
 #include "folly/Executor.h"
 #include "folly/io/async/EventBase.h"
 #include "folly/io/async/EventBaseManager.h"
-#include "folly/io/async/IoUringBackend.h"
+#include "folly/experimental/io/IoUringBackend.h"
 #endif  // USE_COROUTINES && FOLLY_HAS_LIBURING
 
 #if defined(OS_LINUX) && !defined(F_SET_RW_HINT)

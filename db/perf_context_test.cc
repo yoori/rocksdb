@@ -32,10 +32,10 @@
 
 #if defined(USE_COROUTINES)
 #include "folly/Executor.h"
-#include "folly/coro/BlockingWait.h"
-#include "folly/coro/Collect.h"
-#include "folly/coro/CurrentExecutor.h"
-#include "folly/coro/Task.h"
+#include "folly/experimental/coro/BlockingWait.h"
+#include "folly/experimental/coro/Collect.h"
+#include "folly/experimental/coro/CurrentExecutor.h"
+#include "folly/experimental/coro/Task.h"
 #include "folly/executors/IOThreadPoolExecutor.h"
 #include "folly/io/async/EventBase.h"
 #include "folly/io/async/Request.h"
@@ -105,7 +105,7 @@ TEST_F(PerfContextTest, CoroutineStatsContextScopeCollectsStats) {
   auto clock = std::make_shared<MockSystemClock>(SystemClock::Default());
   clock->SetCurrentTime(1);
   CoroutineStatsConfig stats_config = CaptureCoroutineStatsConfig();
-  folly::coro::blockingWait(folly::coro::co_withExecutor(
+  folly::coro::blockingWait(folly::coro::co_viaIfAsync(
       folly::Executor::getKeepAliveToken(event_base),
       [event_base, clock = clock.get(),
        stats_config =
@@ -182,7 +182,7 @@ TEST_F(PerfContextTest, CoroutineStatsContextsRemainIsolatedWhenInterleaved) {
   folly::EventBase* event_base = executor.getEventBase();
   ASSERT_NE(nullptr, event_base);
 
-  folly::coro::blockingWait(folly::coro::co_withExecutor(
+  folly::coro::blockingWait(folly::coro::co_viaIfAsync(
       folly::Executor::getKeepAliveToken(event_base),
       [first_stats_config = std::move(first_stats_config),
        second_stats_config = std::move(

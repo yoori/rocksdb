@@ -535,9 +535,8 @@ DEFINE_SYNC_AND_ASYNC(void, Version::MultiGet)
               folly::coro::collectAllRange(std::move(mget_tasks)));
 #else
           std::vector<Status> statuses =
-              folly::coro::blockingWait(co_withExecutor(
-                  &range->context()->executor(),
-                  folly::coro::collectAllRange(std::move(mget_tasks))));
+              folly::coro::blockingWait(folly::coro::co_viaIfAsync(
+    folly::getKeepAliveToken(&range->context()->executor()), folly::coro::collectAllRange(std::move(mget_tasks))));
 #endif
           if (s.ok()) {
             for (Status stat : statuses) {

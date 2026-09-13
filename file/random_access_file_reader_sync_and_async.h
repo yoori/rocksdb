@@ -10,8 +10,8 @@
 #if defined(USE_COROUTINES)
 #include <atomic>
 
-#include "folly/coro/Baton.h"
-#include "folly/coro/Coroutine.h"
+#include "folly/experimental/coro/Baton.h"
+#include "folly/experimental/coro/Coroutine.h"
 #endif
 
 #if defined(WITHOUT_COROUTINES) || \

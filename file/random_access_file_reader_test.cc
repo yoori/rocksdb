@@ -18,8 +18,8 @@
 
 #if defined(USE_COROUTINES)
 #include "folly/Executor.h"
-#include "folly/coro/BlockingWait.h"
-#include "folly/coro/Task.h"
+#include "folly/experimental/coro/BlockingWait.h"
+#include "folly/experimental/coro/Task.h"
 #include "folly/executors/IOThreadPoolExecutor.h"
 #include "rocksdb/statistics.h"
 #endif
@@ -132,7 +132,7 @@ TEST_F(RandomAccessFileReaderTest, CountsCoroutineReadSyncFallback) {
   folly::IOThreadPoolExecutor executor(1);
   folly::EventBase* event_base = executor.getEventBase();
   ASSERT_NE(event_base, nullptr);
-  ASSERT_OK(folly::coro::blockingWait(folly::coro::co_withExecutor(
+  ASSERT_OK(folly::coro::blockingWait(folly::coro::co_viaIfAsync(
       folly::Executor::getKeepAliveToken(event_base),
       reader.ReadCoroutine(IOOptions(), 0, content.size(), &result,
                            scratch.data(), nullptr, nullptr))));

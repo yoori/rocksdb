@@ -24,7 +24,7 @@
 #include "util/random.h"
 
 #if USE_COROUTINES
-#include "folly/coro/BlockingWait.h"
+#include "folly/experimental/coro/BlockingWait.h"
 #endif  // USE_COROUTINES
 
 namespace ROCKSDB_NAMESPACE {

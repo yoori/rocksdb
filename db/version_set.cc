@@ -76,8 +76,8 @@
 #include "util/user_comparator_wrapper.h"
 
 #if USE_COROUTINES
-#include "folly/coro/BlockingWait.h"
-#include "folly/coro/Collect.h"
+#include "folly/experimental/coro/BlockingWait.h"
+#include "folly/experimental/coro/Collect.h"
 #endif  // USE_COROUTINES
 
 namespace ROCKSDB_NAMESPACE {
@@ -3079,9 +3079,8 @@ Status Version::MultiGetAsync(
         RecordTick(db_statistics_, MULTIGET_COROUTINE_COUNT, mget_tasks.size());
         // Collect all results so far
         std::vector<Status> statuses =
-            folly::coro::blockingWait(co_withExecutor(
-                &range->context()->executor(),
-                folly::coro::collectAllRange(std::move(mget_tasks))));
+            folly::coro::blockingWait(folly::coro::co_viaIfAsync(
+    folly::getKeepAliveToken(&range->context()->executor()), folly::coro::collectAllRange(std::move(mget_tasks))));
         mget_tasks.clear();
         if (s.ok()) {
           for (Status stat : statuses) {

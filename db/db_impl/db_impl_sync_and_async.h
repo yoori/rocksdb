@@ -46,7 +46,7 @@ DEFINE_SYNC_AND_ASYNC(Status, DBImpl::Get)
   if (read_executor != nullptr) {
     auto* read_event_base = read_executor->getEventBase();
     assert(read_event_base != nullptr);
-    Status s = co_await folly::coro::co_nothrow(folly::coro::co_withExecutor(
+    Status s = co_await folly::coro::co_nothrow(folly::coro::co_viaIfAsync(
         folly::Executor::getKeepAliveToken(read_event_base),
         GetImplCoroutine(read_options, column_family, key, value, timestamp)));
     co_return s;
@@ -811,7 +811,7 @@ DEFINE_SYNC_AND_ASYNC(void, DBImpl::MultiGet)
   if (read_executor != nullptr) {
     auto* read_event_base = read_executor->getEventBase();
     assert(read_event_base != nullptr);
-    co_await folly::coro::co_nothrow(folly::coro::co_withExecutor(
+    co_await folly::coro::co_nothrow(folly::coro::co_viaIfAsync(
         folly::Executor::getKeepAliveToken(read_event_base),
         MultiGetCommonCoroutine(
             read_options, num_keys, column_families, keys, values,

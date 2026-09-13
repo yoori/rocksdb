@@ -74,7 +74,7 @@
 #include "folly/executors/thread_factory/NamedThreadFactory.h"
 #include "folly/io/async/EventBase.h"
 #include "folly/io/async/EventBaseManager.h"
-#include "folly/io/async/IoUringBackend.h"
+#include "folly/experimental/io/IoUringBackend.h"
 #endif  // USE_COROUTINES && FOLLY_HAS_LIBURING
 
 #if !defined(TMPFS_MAGIC)
@@ -98,8 +98,8 @@ inline mode_t GetDBFileMode(bool allow_non_owner_access) {
 }
 
 #if USE_COROUTINES && FOLLY_HAS_LIBURING
-folly::IoUringOptions GetReadIOUringOptions() {
-  folly::IoUringOptions options;
+folly::IoUringBackend::Options GetReadIOUringOptions() {
+  folly::IoUringBackend::Options options;
   options.setMaxSubmit(256);
   options.setCapacity(1024);
   options.setMinCapacity(512);

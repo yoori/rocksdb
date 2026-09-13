@@ -47,7 +47,7 @@
 #include "util/thread_local.h"
 
 #if USE_COROUTINES
-#include "folly/io/async/Liburing.h"
+#include "folly/experimental/io/Liburing.h"
 
 namespace folly {
 class EventBaseManager;
@@ -401,6 +401,9 @@ inline struct io_uring* CreateIOUring() {
   flags |= IORING_SETUP_SINGLE_ISSUER;
   flags |= IORING_SETUP_DEFER_TASKRUN;
   int ret = io_uring_queue_init(kIoUringDepth, new_io_uring, flags);
+  if (ret == -EINVAL) {
+    ret = io_uring_queue_init(kIoUringDepth, new_io_uring, 0);
+  }
   if (ret) {
     fprintf(stdout, "CreateIOUring failed: %s (errno=%d), thread=%lu\n",
             errnoStr(-ret).c_str(), -ret,
